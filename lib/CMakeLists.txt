@@ -1,0 +1,1 @@
+add_library(TapeSorterLib config_reader.cpp config_reader.h tape.cpp tape.h tape_sorter.cpp tape_sorter.h)
