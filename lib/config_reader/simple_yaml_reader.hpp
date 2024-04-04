@@ -2,13 +2,18 @@
 
 #include <chrono>
 #include <filesystem>
+#include <fstream>
 #include <string>
 #include <unordered_map>
 
-namespace tape_sorter {
-
-    class ConfigReader {
+namespace config_reader {
+    class SimpleYamlReader {
     public:
+        explicit SimpleYamlReader(const char *path);
+        explicit SimpleYamlReader(const std::string &path);
+
+        void ReadConfig();
+
         class Value {
         public:
             Value() = default;
@@ -19,7 +24,7 @@ namespace tape_sorter {
             [[nodiscard]] std::chrono::seconds AsSeconds() const;
             [[nodiscard]] std::filesystem::path AsPath() const;
             [[nodiscard]] std::string AsString() const;
-            [[nodiscard]] int AsInt() const;
+            [[nodiscard]] int32_t AsInt32() const;
             [[nodiscard]] long long AsLongLong() const;
             [[nodiscard]] long AsLong() const;
             [[nodiscard]] double AsDouble() const;
@@ -28,16 +33,10 @@ namespace tape_sorter {
             std::string value_;
         };
 
-        explicit ConfigReader(const char *path);
-        explicit ConfigReader(const std::string &path);
-
-        void ReadConfig();
-
         Value operator[](const std::string &field_name);
 
     private:
         std::filesystem::path path_;
         std::unordered_map<std::string, Value> fields_;
     };
-
-}  // namespace tape_sorter
+} // namespace config_reader

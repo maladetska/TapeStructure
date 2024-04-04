@@ -1,425 +1,360 @@
-#include "tape.h"
+#include "tape.hpp"
 
-namespace tape_sorter {
+namespace tape_structure {
 
-    void Tape::InitFirstChunk() {
-        file_.open(path_);
-        chunk_.resize(max_size_chunk_);
-        for (int32_t &num: chunk_) {
-            file_ >> num;
-        }
-    }
+    Tape::Tape(std::filesystem::path& path)
+        : path_(path),
+          current_chunk_(Chunk(0, chunks_info_.max_size_chunk_)) {}
 
-    void Tape::CountCapacity() {
-        file_.open(path_);
-        int32_t number;
-        while (file_ >> number) {
-            capacity_++;
-        }
-        if (capacity_ < size_) {
-            std::filesystem::create_directories(kDirForTempTapes_);
-            std::filesystem::path tmp_path(kDirForTempTapes_);
-            tmp_path += "cap_tmp.txt";
-            std::fstream tmp(tmp_path, std::fstream::out);
-            file_.close();
-            file_.open(path_);
-            for (size_t i = 0; i < capacity_; i++) {
-                file_ >> number;
-                tmp << number << ' ';
-            }
-            while (capacity_ < size_) {
-                tmp << 0 << ' ';
-                capacity_++;
-            }
-            tmp.close();
-            tmp.open(tmp_path, std::fstream::in);
-            file_.seekg(0);
-            file_.seekp(0);
-            for (size_t i = 0; i < capacity_; i++) {
-                tmp >> number;
-                file_ << number << ' ';
-            }
-            tmp.close();
-            remove_all(tmp_path);
-        }
-        file_.close();
-    }
-
-    Tape::Tape(std::filesystem::path &p) : path_(p) {}
-
-    Tape::Tape(std::filesystem::path &p,
-               size_t s,
-               size_t sc,
-               std::chrono::milliseconds d1,
-               std::chrono::milliseconds d2,
-               std::chrono::milliseconds d3) : path_(p),
-                                               size_(s),
-                                               max_size_chunk_(sc),
-                                               delay_for_read_(d1),
-                                               delay_for_put_(d2),
-                                               delay_for_shift_(d3) {
+    Tape::Tape(std::filesystem::path& path,
+               TapeSize tape_size,
+               ChunkSize chunk_size,
+               std::chrono::milliseconds delay_for_read,
+               std::chrono::milliseconds delay_for_put,
+               std::chrono::milliseconds delay_for_shift) : path_(path),
+                                                            delays_(delay_for_read, delay_for_put, delay_for_shift),
+                                                            size_(tape_size) {
         CountCapacity();
-        count_of_cap_chunks_ = capacity_ == 0 ? 0 : (capacity_ - 1) / max_size_chunk_ + 1;
-        last_ptr_ = capacity_ % max_size_chunk_ == 0 ? max_size_chunk_ : capacity_ % max_size_chunk_;
-        count_of_chunks_ = (size_ - 1) / max_size_chunk_ + 1;
-        last_size_chunk_ = size_ % max_size_chunk_ == 0 ? max_size_chunk_ : size_ % max_size_chunk_;
-        chunk_number_ = 0;
-        ptr_in_chunk_ = 0;
+        chunks_info_ = ChunksInfo(chunk_size, size_);
+        current_chunk_ = Chunk(0, chunks_info_.max_size_chunk_);
+        stream_from_.open(path_);
     }
 
-    Tape::Tape(std::filesystem::path &p, size_t s, size_t sc) : path_(p),
-                                                                size_(s),
-                                                                max_size_chunk_(sc) {
-        CountCapacity();
-        count_of_cap_chunks_ = capacity_ == 0 ? 0 : (capacity_ - 1) / max_size_chunk_ + 1;
-        last_ptr_ = capacity_ % max_size_chunk_ == 0 ? max_size_chunk_ : capacity_ % max_size_chunk_;
-        count_of_chunks_ = (size_ - 1) / max_size_chunk_ + 1;
-        last_size_chunk_ = size_ % max_size_chunk_ == 0 ? max_size_chunk_ : size_ % max_size_chunk_;
-        chunk_number_ = 0;
-        ptr_in_chunk_ = 0;
-        delay_for_read_ = 0ms;
-        delay_for_put_ = 0ms;
-        delay_for_shift_ = 0ms;
-    }
+    Tape::Tape(std::filesystem::path& path, TapeSize tape_size, ChunkSize chunk_size)
+        : Tape(path, tape_size, chunk_size, 0ms, 0ms, 0ms) {}
 
-    Tape::Tape(const Tape &t) : path_(t.path_),
-                                size_(t.size_),
-                                max_size_chunk_(t.max_size_chunk_),
-                                count_of_cap_chunks_(t.count_of_cap_chunks_),
-                                count_of_chunks_(t.count_of_chunks_),
-                                last_size_chunk_(t.last_size_chunk_),
-                                capacity_(t.capacity_),
-                                last_ptr_(t.last_ptr_),
-                                delay_for_read_(t.delay_for_read_),
-                                delay_for_put_(t.delay_for_put_),
-                                delay_for_shift_(t.delay_for_shift_) {
-        chunk_number_ = 0;
-        ptr_in_chunk_ = 0;
-    }
+    Tape::Tape(const Tape& other) : path_(other.path_),
+                                    delays_(other.delays_),
+                                    size_(other.size_),
+                                    capacity_(other.capacity_),
+                                    chunks_info_(other.chunks_info_),
+                                    current_chunk_(other.current_chunk_) {}
 
-    Tape::Tape(std::filesystem::path &p, const Tape &t)
-        : path_(p), size_(t.size_),
-          max_size_chunk_(t.max_size_chunk_),
-          count_of_cap_chunks_(t.count_of_cap_chunks_),
-          count_of_chunks_(t.count_of_chunks_),
-          last_size_chunk_(t.last_size_chunk_),
-          capacity_(t.capacity_),
-          last_ptr_(t.last_ptr_),
-          delay_for_read_(t.delay_for_read_),
-          delay_for_put_(t.delay_for_put_),
-          delay_for_shift_(t.delay_for_shift_) {
-        file_.open(path_);
-        std::ifstream t_file(t.path_);
-        int32_t num;
-        while (t_file >> num) {
-            file_ << num << ' ';
+    void Tape::PrintInFile(std::fstream& stream_to) {
+        NumberType num;
+        while (stream_to >> num) {
+            stream_from_ << num << ' ';
         }
-        file_.close();
-        t_file.close();
-        chunk_number_ = 0;
-        ptr_in_chunk_ = 0;
     }
 
-    Tape &Tape::operator=(const Tape &t) {
-        size_ = t.size_;
-        max_size_chunk_ = t.max_size_chunk_;
-        count_of_cap_chunks_ = t.count_of_cap_chunks_;
-        count_of_chunks_ = t.count_of_chunks_;
-        last_size_chunk_ = t.last_size_chunk_;
-        capacity_ = t.capacity_;
-        last_ptr_ = t.last_ptr_;
-        delay_for_read_ = t.delay_for_read_;
-        delay_for_put_ = t.delay_for_put_;
-        delay_for_shift_ = t.delay_for_shift_;
+    Tape::Tape(const Tape& other, std::filesystem::path& path) : Tape(other) {
+        path_ = path;
+        stream_from_.open(path_);
+        std::fstream other_file(other.path_);
+        PrintInFile(other_file);
+        stream_from_.close();
+        other_file.close();
+    }
+
+    Tape& Tape::operator=(const Tape& other) {
+        path_ = other.path_;
+        delays_ = other.delays_;
+        size_ = other.size_;
+        capacity_ = other.capacity_;
+        chunks_info_ = other.chunks_info_;
+        current_chunk_ = other.current_chunk_;
+        unused_ = other.unused_;
+
         if (exists(path_)) {
-            if (file_.is_open()) file_.close();
-            file_.open(path_, std::ios::in | std::ios::out);
-            std::ifstream t_file(t.path_);
-            int32_t num;
-            while (t_file >> num) {
-                file_ << num << ' ';
+            if (stream_from_.is_open()) {
+                stream_from_.close();
             }
-            file_.close();
+            stream_from_.open(path_, std::ios::in | std::ios::out);
+            std::fstream other_file(other.path_);
+            PrintInFile(other_file);
+            stream_from_.close();
         } else {
-            path_ = t.path_;
+            path_ = other.path_;
         }
-        chunk_number_ = 0;
-        ptr_in_chunk_ = 0;
-        return *this;
-    }
-
-    Tape &Tape::operator=(Tape &&t) noexcept {
-        size_ = t.size_;
-        count_of_cap_chunks_ = t.count_of_cap_chunks_;
-        count_of_chunks_ = t.count_of_chunks_;
-        last_size_chunk_ = t.last_size_chunk_;
-        max_size_chunk_ = t.max_size_chunk_;
-        capacity_ = t.capacity_;
-        last_ptr_ = t.last_ptr_;
-        delay_for_read_ = t.delay_for_read_;
-        delay_for_put_ = t.delay_for_put_;
-        delay_for_shift_ = t.delay_for_shift_;
-        if (exists(path_)) {
-            if (file_.is_open()) file_.close();
-            file_.open(path_, std::ios::in | std::ios::out);
-            t.file_.close();
-            t.file_.open(t.path_, std::ios::in | std::ios::out);
-            int32_t num;
-            while (t.file_ >> num) {
-                file_ << num << ' ';
-            }
-            file_.close();
-        } else {
-            path_ = t.path_;
-        }
-        chunk_number_ = 0;
-        ptr_in_chunk_ = 0;
-        t.path_ = "";
-        t.size_ = 0;
-        t.count_of_cap_chunks_ = 0;
-        t.count_of_chunks_ = 0;
-        t.last_size_chunk_ = 0;
-        t.max_size_chunk_ = 0;
-        t.capacity_ = 0;
-        t.last_ptr_ = 0;
-        delay_for_read_ = 0ms;
-        delay_for_put_ = 0ms;
-        delay_for_shift_ = 0ms;
-        t.file_.close();
 
         return *this;
     }
 
-    size_t Tape::GetSize() const {
-        return size_;
+    Tape::Tape(Tape&& other) noexcept {
+        *this = std::move(other);
     }
 
-    size_t Tape::GetCapacity() const {
-        return capacity_;
+    Tape& Tape::operator=(Tape&& other) noexcept {
+        if (&other == this) {
+            return *this;
+        }
+
+        std::swap(other.path_, path_);
+        std::swap(other.delays_, delays_);
+        std::swap(other.size_, size_);
+        std::swap(other.capacity_, capacity_);
+        std::swap(other.chunks_info_, chunks_info_);
+        std::swap(other.current_chunk_, current_chunk_);
+        std::swap(other.unused_, unused_);
+
+        if (exists(path_)) {
+            if (stream_from_.is_open()) stream_from_.close();
+            stream_from_.open(path_, std::ios::in | std::ios::out);
+            other.stream_from_.close();
+            other.stream_from_.open(other.path_, std::ios::in | std::ios::out);
+            PrintInFile(other.stream_from_);
+            stream_from_.close();
+        } else {
+            path_ = other.path_;
+        }
+        other.stream_from_.close();
+
+        return *this;
     }
 
-    std::chrono::milliseconds Tape::GetDelayForRead() const {
-        return delay_for_read_;
-    }
-    std::chrono::milliseconds Tape::GetDelayForPut() const {
-        return delay_for_put_;
-    }
-    std::chrono::milliseconds Tape::GetDelayForShift() const {
-        return delay_for_shift_;
+    Tape::~Tape() {
+        stream_from_.close();
     }
 
-    size_t Tape::GetCountOfChunks() const {
-        return count_of_chunks_;
+    ChunkSize Tape::CountChunkSize(MemorySize memory, TapeSize size) {
+        return std::min(memory / kDivider, size);
     }
 
     std::filesystem::path Tape::GetPath() const {
         return path_;
     }
 
-    size_t Tape::GetPtrInChunk() const {
-        return ptr_in_chunk_;
+    TapeSize Tape::GetSize() const {
+        return size_;
     }
 
-    int32_t Tape::GetCurr() {
-        std::this_thread::sleep_for(delay_for_read_);
-        if (unused_) {
-            InitFirstChunk();
-            unused_ = false;
-        }
-        return chunk_[ptr_in_chunk_];
+    TapeSize Tape::GetCountOfChunks() const {
+        return chunks_info_.count_of_chunks_;
     }
 
-    void *Tape::GetCurrPos() {
-        return &ptr_in_chunk_;
+    TapeSize Tape::GetMaxChunkSize() const {
+        return chunks_info_.max_size_chunk_;
     }
 
-    size_t Tape::GetMaxSizeChunk() const {
-        return max_size_chunk_;
+    TapeSize Tape::GetMinChunkSize() const {
+        return chunks_info_.last_size_chunk_;
     }
 
-    size_t Tape::GetMinSizeChunk() const {
-        return last_size_chunk_;
+    std::vector<NumberType> Tape::GetChunkNumbers() const {
+        return current_chunk_.GetChunkNumbers();
     }
 
-    void Tape::ReadNextChunk() {
-        if (unused_) {
-            InitFirstChunk();
-            unused_ = false;
+    NumberType Tape::GetCurrentNumber() {
+        std::this_thread::sleep_for(delays_.delay_for_read_);
+        if (InitFirstChunk()) {
+            current_chunk_.MoveToLeftEdge();
         }
-        chunk_number_++;
-        ptr_in_chunk_ = 0;
-        if (chunk_number_ == count_of_chunks_ - 1) {
-            chunk_.resize(last_size_chunk_);
-        } else {
-            chunk_.resize(max_size_chunk_);
-        }
-        for (int32_t &i: chunk_) {
-            file_ >> i;
-        }
-    }
 
-    void Tape::ReadPrevChunk() {
-        chunk_number_--;
-        chunk_.resize(max_size_chunk_);
-        file_.seekp(0);
-        file_.seekg(0);
-        for (size_t i = 0; i < chunk_number_ * max_size_chunk_; i++) {
-            int32_t x;
-            file_ >> x;
-        }
-        for (int32_t &i: chunk_) {
-            file_ >> i;
-        }
-        ptr_in_chunk_ = max_size_chunk_ - 1;
-    }
-
-    bool Tape::MoveLeft() {
-        std::this_thread::sleep_for(delay_for_shift_);
-        if (unused_) {
-            InitFirstChunk();
-            unused_ = false;
-        }
-        if (chunk_number_ == count_of_chunks_ - 1 && ptr_in_chunk_ == last_size_chunk_ - 1) {
-            return false;
-        }
-        if (ptr_in_chunk_ != chunk_.size() - 1) {
-            ptr_in_chunk_++;
-        } else {
-            ReadNextChunk();
-        }
-        return true;
+        return current_chunk_.GetCurrentNumber();
     }
 
     bool Tape::MoveRight() {
-        std::this_thread::sleep_for(delay_for_shift_);
-        if (unused_) {
-            InitFirstChunk();
-            unused_ = false;
-        }
-        if (chunk_number_ == 0 && ptr_in_chunk_ == 0) {
-            return false;
-        }
-        if (ptr_in_chunk_ != 0) {
-            ptr_in_chunk_--;
-        } else {
-            ReadPrevChunk();
+        std::this_thread::sleep_for(delays_.delay_for_shift_);
+        if (InitFirstChunk()) {
+            current_chunk_.MoveToLeftEdge();
         }
 
-        return true;
+        if (current_chunk_.IsPossibleTakeLeftNumber()) {
+            if (!current_chunk_.MoveRightPos()) {
+                ReadPrevChunk();
+            }
+            return true;
+        }
+        return false;
     }
 
-    int32_t Tape::GetLeft() {
-        std::this_thread::sleep_for(delay_for_shift_);
-        if (unused_ || !MoveRight()) {
-            throw std::out_of_range("Out of Tape range");
-        } else {
-            return GetCurr();
-        }
-    }
-
-    int32_t Tape::GetRight() {
-        std::this_thread::sleep_for(delay_for_shift_);
-        if (unused_) {
-            InitFirstChunk();
-            unused_ = false;
-        }
-        if (MoveLeft()) {
-            return GetCurr();
-        } else {
-            throw std::out_of_range("Out of Tape range");
-        }
-    }
-
-    std::vector<int32_t> &Tape::ReadOneChunk(std::fstream &from, std::vector<int32_t> &ch, size_t s) {
-        ch.resize(s);
-        for (size_t i = 0; i < s; i++) {
-            from >> ch[i];
+    bool Tape::MoveLeft() {
+        std::this_thread::sleep_for(delays_.delay_for_shift_);
+        if (InitFirstChunk()) {
+            current_chunk_.MoveToLeftEdge();
         }
 
-        return ch;
-    }
-
-    void Tape::PrintOneChunk(std::fstream &to, std::vector<int32_t> &ch) {
-        for (int32_t &i: ch) {
-            to << i << ' ';
+        if (current_chunk_.IsPossibleTakeRightNumber(chunks_info_.count_of_chunks_)) {
+            if (!current_chunk_.MoveLeftPos()) {
+                ReadNextChunk();
+            }
+            return true;
         }
+        return false;
     }
 
-    void Tape::PutNumberInChunk(std::fstream &to, const int32_t &number, size_t s) {
-        chunk_.resize(s);
-        for (size_t i = 0; i < s; i++) {
-            file_ >> chunk_[i];
-        }
-        chunk_[ptr_in_chunk_] = number;
-        PrintOneChunk(to, chunk_);
-    }
+    void Tape::Put(const NumberType& number) {
+        std::this_thread::sleep_for(delays_.delay_for_put_);
 
-    void Tape::DestroyChunk() {
-        chunk_.clear();
-    }
-
-    void Tape::Put(const int32_t &number) {
-        std::this_thread::sleep_for(delay_for_put_);
-        if (unused_) {
-            InitFirstChunk();
-            unused_ = false;
+        ChunkSize current_pos = current_chunk_.GetPos();
+        ChunksCount current_chunk_number = current_chunk_.GetChunkNumber();
+        if (InitFirstChunk()) {
+            current_chunk_.MoveRightPos();
         }
         std::filesystem::create_directories(kDirForTempTapes_);
+
         std::filesystem::path tmp_path(kDirForTempTapes_);
         tmp_path += "print_tmp.txt";
-        std::fstream tmp(tmp_path, std::fstream::out);
-        file_.seekg(0);
-        file_.seekp(0);
-        chunk_.resize(max_size_chunk_);
-        if (count_of_chunks_ == 1) {
-            PutNumberInChunk(tmp, number, max_size_chunk_);
-        } else if (chunk_number_ == count_of_chunks_ - 1) {
-            for (size_t i = 0; i < count_of_chunks_ - 1; i++) {
-                PrintOneChunk(tmp, ReadOneChunk(file_, chunk_, max_size_chunk_));
+        std::fstream tmp_to(tmp_path, std::fstream::out);
+
+        stream_from_.seekg(0);
+        stream_from_.seekp(0);
+
+        if (chunks_info_.count_of_chunks_ == 1) {
+            PutNumberInChunk(tmp_to, chunks_info_.max_size_chunk_, current_pos, number);
+        } else if (current_chunk_number == chunks_info_.count_of_chunks_ - 1) {
+            for (TapeSize i = 0; i < chunks_info_.count_of_chunks_ - 1; i++) {
+                ReadAndWriteNewChunk(stream_from_, tmp_to, i, chunks_info_.max_size_chunk_);
             }
-            PutNumberInChunk(tmp, number, last_size_chunk_);
-        } else if (chunk_number_ == 0) {
-            PutNumberInChunk(tmp, number, max_size_chunk_);
-            for (size_t i = 1; i < count_of_chunks_ - 1; i++) {
-                PrintOneChunk(tmp, ReadOneChunk(file_, chunk_, max_size_chunk_));
+            PutNumberInChunk(tmp_to, chunks_info_.last_size_chunk_, current_pos, number);
+        } else if (current_chunk_number == 0) {
+            PutNumberInChunk(tmp_to, chunks_info_.max_size_chunk_, current_pos, number);
+            for (TapeSize i = 1; i < chunks_info_.count_of_chunks_ - 1; i++) {
+                ReadAndWriteNewChunk(stream_from_, tmp_to, i, chunks_info_.max_size_chunk_);
             }
-            PrintOneChunk(tmp, ReadOneChunk(file_, chunk_, last_size_chunk_));
+            ReadAndWriteNewChunk(stream_from_,
+                                 tmp_to,
+                                 chunks_info_.count_of_chunks_ - 1,
+                                 chunks_info_.last_size_chunk_);
         } else {
-            for (size_t i = 0; i < chunk_number_; i++) {
-                PrintOneChunk(tmp, ReadOneChunk(file_, chunk_, max_size_chunk_));
+            for (TapeSize i = 0; i < current_chunk_number; i++) {
+                ReadAndWriteNewChunk(stream_from_, tmp_to, i, chunks_info_.max_size_chunk_);
             }
-            PutNumberInChunk(tmp, number, max_size_chunk_);
-            for (size_t i = chunk_number_ + 1; i < count_of_chunks_ - 1; i++) {
-                PrintOneChunk(tmp, ReadOneChunk(file_, chunk_, max_size_chunk_));
+            PutNumberInChunk(tmp_to, chunks_info_.max_size_chunk_, current_pos, number);
+            for (TapeSize i = current_chunk_number + 1; i < chunks_info_.count_of_chunks_ - 1; i++) {
+                ReadAndWriteNewChunk(stream_from_, tmp_to, i, chunks_info_.max_size_chunk_);
             }
-            PrintOneChunk(tmp, ReadOneChunk(file_, chunk_, last_size_chunk_));
+            ReadAndWriteNewChunk(stream_from_,
+                                 tmp_to,
+                                 chunks_info_.count_of_chunks_ - 1,
+                                 chunks_info_.last_size_chunk_);
         }
 
-        file_.close();
-        file_.open(path_, std::ios::in | std::ios::out);
-        tmp.close();
-        tmp.open(tmp_path, std::ios::in);
-        file_.seekg(0);
-        file_.seekp(0);
-        tmp.seekg(0);
-        tmp.seekp(0);
+        stream_from_.close();
+        stream_from_.open(path_, std::ios::in | std::ios::out);
+        tmp_to.close();
+        tmp_to.open(tmp_path, std::ios::in);
+        stream_from_.seekg(0);
+        stream_from_.seekp(0);
+        tmp_to.seekg(0);
+        tmp_to.seekp(0);
 
-        chunk_.resize(max_size_chunk_);
-        for (size_t i = 0; i < count_of_chunks_ - 1; i++) {
-            PrintOneChunk(file_, ReadOneChunk(tmp, chunk_, max_size_chunk_));
+        for (TapeSize i = 0; i < chunks_info_.count_of_chunks_ - 1; i++) {
+            ReadAndWriteNewChunk(tmp_to, stream_from_, i, chunks_info_.max_size_chunk_);
         }
-        PrintOneChunk(file_, ReadOneChunk(tmp, chunk_, last_size_chunk_));
+        ReadAndWriteNewChunk(
+                tmp_to,
+                stream_from_,
+                chunks_info_.count_of_chunks_ - 1,
+                chunks_info_.last_size_chunk_);
 
-        tmp.close();
+        tmp_to.close();
         std::filesystem::remove_all(kDirForTempTapes_);
 
-        size_t curr_ptr = ptr_in_chunk_;
-        size_t curr_chunk = chunk_number_;
-        ptr_in_chunk_ = last_size_chunk_;
-        chunk_number_ = count_of_chunks_ - 1;
-        while (curr_ptr != ptr_in_chunk_ || curr_chunk != chunk_number_) {
+        while (current_chunk_.IsToTheLeftThan(current_pos, current_chunk_number)) {
             MoveRight();
         }
     }
 
-}  // namespace tape_sorter
+    void Tape::ClearChunkInTape() {
+        current_chunk_.Destroy();
+    }
+
+    void Tape::CountCapacity() {
+        stream_from_.open(path_);
+        NumberType number;
+        while (stream_from_ >> number) {
+            capacity_++;
+        }
+        if (capacity_ < size_) {
+            std::filesystem::create_directories(kDirForTempTapes_);
+            std::filesystem::path tmp_path(kDirForTempTapes_);
+            tmp_path += "cap_tmp.txt";
+            std::fstream tmp_to(tmp_path, std::ifstream::out);
+            stream_from_.close();
+
+            stream_from_.open(path_);
+            for (TapeSize i = 0; i < capacity_; i++) {
+                stream_from_ >> number;
+                tmp_to << number << ' ';
+            }
+            while (capacity_ < size_) {
+                tmp_to << 0 << ' ';
+                capacity_++;
+            }
+            tmp_to.close();
+
+            tmp_to.open(tmp_path, std::ifstream::in);
+            stream_from_.seekg(0);
+            stream_from_.seekp(0);
+            for (TapeSize i = 0; i < capacity_; i++) {
+                tmp_to >> number;
+                stream_from_ << number << ' ';
+            }
+            tmp_to.close();
+
+            remove_all(tmp_path);
+        }
+        stream_from_.close();
+    }
+
+    bool Tape::InitFirstChunk() {
+        if (unused_) {
+            stream_from_.open(path_);
+            current_chunk_.ReadNewChunk(stream_from_, 0, chunks_info_.max_size_chunk_);
+            unused_ = false;
+
+            return true;
+        }
+        return false;
+    }
+
+    void Tape::ReadNextChunk() {
+        if (InitFirstChunk()) {
+            return;
+        }
+
+        ChunksCount current_chunk_number = current_chunk_.GetChunkNumber();
+        current_chunk_.ReadNewChunk(stream_from_,
+                                    current_chunk_number + 1,
+                                    current_chunk_number + 1 == chunks_info_.count_of_chunks_ - 1
+                                            ? chunks_info_.last_size_chunk_
+                                            : chunks_info_.max_size_chunk_);
+        current_chunk_.MoveToLeftEdge();
+    }
+
+    void Tape::ReadPrevChunk() {
+        stream_from_.seekp(0);
+        stream_from_.seekg(0);
+
+        ChunksCount current_chunk_number = current_chunk_.GetChunkNumber();
+
+        for (ChunkSize i = 0; i < (current_chunk_number - 1) * chunks_info_.max_size_chunk_; i++) {
+            NumberType number;
+            stream_from_ >> number;
+        }
+
+        current_chunk_.ReadNewChunk(stream_from_,
+                                    current_chunk_number - 1,
+                                    chunks_info_.max_size_chunk_);
+        current_chunk_.MoveToRightEdge();
+    }
+
+    void Tape::PutNumberInChunk(std::fstream& stream_to, ChunkSize size, ChunkSize pos, NumberType number) {
+        current_chunk_.ReadNewChunk(stream_from_,
+                                    current_chunk_.GetChunkNumber(),
+                                    size);
+        current_chunk_.PutNumberInArrayByPos(number, pos);
+        current_chunk_.PrintChunk(stream_to);
+    }
+
+    void Tape::ReadAndWriteNewChunk(std::fstream& from,
+                                    std::fstream& to,
+                                    ChunksCount new_chunk_number,
+                                    ChunkSize new_size) {
+        current_chunk_.ReadNewChunk(from, new_chunk_number, new_size);
+        current_chunk_.PrintChunk(to);
+    }
+
+    Tape::Delays::Delays(std::chrono::milliseconds delay_for_read,
+                         std::chrono::milliseconds delay_for_put,
+                         std::chrono::milliseconds delay_for_shift) : delay_for_read_(delay_for_read),
+                                                                      delay_for_put_(delay_for_put),
+                                                                      delay_for_shift_(delay_for_shift) {}
+
+    Tape::ChunksInfo::ChunksInfo::ChunksInfo(ChunkSize chunk_size, TapeSize tape_size) {
+        max_size_chunk_ = chunk_size;
+        count_of_chunks_ = (tape_size - 1) / max_size_chunk_ + 1;
+        last_size_chunk_ = tape_size % max_size_chunk_ == 0 ? max_size_chunk_ : tape_size % max_size_chunk_;
+    }
+} // namespace tape_structure

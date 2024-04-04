@@ -18,7 +18,8 @@ add_executable(
 
 target_link_libraries(
         tape_sorter_tests
-        TapeSorterLib
+        TapeConfigReaderLib
+        TapeStructureLib
         GTest::gtest_main
 )
 
@@ -29,9 +30,9 @@ include(GoogleTest)
 gtest_discover_tests(tape_sorter_tests)
 
 file(COPY ${CMAKE_CURRENT_SOURCE_DIR}/static/input1.in DESTINATION ${CMAKE_CURRENT_BINARY_DIR}/resources)
-file(COPY ${CMAKE_CURRENT_SOURCE_DIR}/static/config1.cfg DESTINATION ${CMAKE_CURRENT_BINARY_DIR}/resources)
+file(COPY ${CMAKE_CURRENT_SOURCE_DIR}/static/config1.yaml DESTINATION ${CMAKE_CURRENT_BINARY_DIR}/resources)
 file(COPY ${CMAKE_CURRENT_SOURCE_DIR}/static/output1.out DESTINATION ${CMAKE_CURRENT_BINARY_DIR}/utests)
 
 file(COPY ${CMAKE_CURRENT_SOURCE_DIR}/static/input2.in DESTINATION ${CMAKE_CURRENT_BINARY_DIR}/resources)
-file(COPY ${CMAKE_CURRENT_SOURCE_DIR}/static/config2.cfg DESTINATION ${CMAKE_CURRENT_BINARY_DIR}/resources)
+file(COPY ${CMAKE_CURRENT_SOURCE_DIR}/static/config2.yaml DESTINATION ${CMAKE_CURRENT_BINARY_DIR}/resources)
 file(COPY ${CMAKE_CURRENT_SOURCE_DIR}/static/output2.out DESTINATION ${CMAKE_CURRENT_BINARY_DIR}/utests)

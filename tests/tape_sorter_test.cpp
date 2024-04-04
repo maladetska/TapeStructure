@@ -1,32 +1,36 @@
-#include "lib/config_reader.h"
-#include "lib/tape.h"
-#include "lib/tape_sorter.h"
+#include "lib/sorter/tape_sorter.hpp"
 
 #include <gtest/gtest.h>
 
-TEST(TapeSorter, TestResultFile) {
-    std::filesystem::path path = "./resources/config1.cfg";
-    tape_sorter::ConfigReader config(path);
+#include "lib/config_reader/simple_yaml_reader.hpp"
+
+TEST(TapeStructure, TestResultFile) {
+    std::filesystem::path path = "./resources/config1.yaml";
+
+    config_reader::SimpleYamlReader config(path);
     config.ReadConfig();
-    size_t size = config["N"].AsInt();
-    size_t memory = config["M"].AsInt();
+
+    size_t size = config["N"].AsInt32();
+    size_t memory = config["M"].AsInt32();
+
     std::chrono::milliseconds delay_for_read = config["delay_for_read"].AsMilliseconds();
     std::chrono::milliseconds delay_for_put = config["delay_for_put"].AsMilliseconds();
     std::chrono::milliseconds delay_for_shift = config["delay_for_shift"].AsMilliseconds();
+
     std::filesystem::path path_in = config["path_in"].AsPath();
     std::filesystem::path path_out = config["path_out"].AsPath();
 
-    tape_sorter::Tape tape_in(
+    tape_structure::Tape tape_in(
             path_in,
             size,
-            std::min(memory / 16, size),
+            tape_structure::Tape::CountChunkSize(memory, size),
             delay_for_read,
             delay_for_put,
-            delay_for_shift
-    );
+            delay_for_shift);
 
-    tape_sorter::Tape tape_out(path_out);
-    tape_sorter::TapeSorter sorter(tape_in, tape_out);
+    tape_structure::Tape tape_out(path_out);
+    tape_structure::TapeSorter sorter(tape_in, tape_out);
+
     sorter.Sort();
 
     std::ifstream fin(path_out);
@@ -34,33 +38,37 @@ TEST(TapeSorter, TestResultFile) {
     std::string result;
     std::getline(fin, result);
 
-    const std::string kExpected = "5 11 22 22 33 44 54 55 66 77 88 92 99 111 122 144 148 155 12345 ";
+    const std::string kExpected = "5 5 11 22 22 33 44 54 55 66 77 88 92 99 111 122 144 148 155 12345 ";
     EXPECT_EQ(result, kExpected);
 }
 
-TEST(TapeSorter, TestResultFile2) {
-    std::filesystem::path path = "./resources/config2.cfg";
-    tape_sorter::ConfigReader config(path);
+TEST(TapeStructure, TestResultFile2) {
+    std::filesystem::path path = "./resources/config2.yaml";
+
+    config_reader::SimpleYamlReader config(path);
     config.ReadConfig();
-    size_t size = config["N"].AsInt();
-    size_t memory = config["M"].AsInt();
+
+    size_t size = config["N"].AsInt32();
+    size_t memory = config["M"].AsInt32();
+
     std::chrono::milliseconds delay_for_read = config["delay_for_read"].AsMilliseconds();
     std::chrono::milliseconds delay_for_put = config["delay_for_put"].AsMilliseconds();
     std::chrono::milliseconds delay_for_shift = config["delay_for_shift"].AsMilliseconds();
+
     std::filesystem::path path_in = config["path_in"].AsPath();
     std::filesystem::path path_out = config["path_out"].AsPath();
 
-    tape_sorter::Tape tape_in(
+    tape_structure::Tape tape_in(
             path_in,
             size,
-            std::min(memory / 16, size),
+            tape_structure::Tape::CountChunkSize(memory, size),
             delay_for_read,
             delay_for_put,
-            delay_for_shift
-    );
+            delay_for_shift);
 
-    tape_sorter::Tape tape_out(path_out);
-    tape_sorter::TapeSorter sorter(tape_in, tape_out);
+    tape_structure::Tape tape_out(path_out);
+    tape_structure::TapeSorter sorter(tape_in, tape_out);
+
     sorter.Sort();
 
     std::ifstream fin(path_out);
