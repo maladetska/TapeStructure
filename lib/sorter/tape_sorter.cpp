@@ -155,7 +155,7 @@ namespace tape_structure {
         if (tapes_size % 2 != 0) {
             std::filesystem::path tmp_file = curr_path;
             tmp_file += std::to_string(i) + ".txt";
-            std::fstream stream_to(tmp_file, std::fstream::out);
+            std::fstream stream_out(tmp_file, std::fstream::out);
             Tape curr_tape(tapes[tapes_size - 1], tmp_file);
             new_tapes[new_tapes.size() - 1] = curr_tape;
         }

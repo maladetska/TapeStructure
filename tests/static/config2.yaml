@@ -1,5 +1,5 @@
-N: 26
-M: 60
+N: 20
+M: 400
 delay_for_read: 0
 delay_for_put: 0
 delay_for_shift: 0

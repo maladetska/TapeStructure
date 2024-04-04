@@ -79,7 +79,6 @@ namespace tape_structure {
             return *this;
         }
 
-        std::swap(other.path_, path_);
         std::swap(other.delays_, delays_);
         std::swap(other.size_, size_);
         std::swap(other.capacity_, capacity_);
@@ -97,6 +96,7 @@ namespace tape_structure {
         } else {
             path_ = other.path_;
         }
+        other.path_ = "";
         other.stream_from_.close();
 
         return *this;
@@ -107,7 +107,7 @@ namespace tape_structure {
     }
 
     ChunkSize Tape::CountChunkSize(MemorySize memory, TapeSize size) {
-        return std::min(memory / kDivider, size);
+        return std::min(memory / kDivider, size); //
     }
 
     std::filesystem::path Tape::GetPath() const {
@@ -260,7 +260,7 @@ namespace tape_structure {
             std::filesystem::create_directories(kDirForTempTapes_);
             std::filesystem::path tmp_path(kDirForTempTapes_);
             tmp_path += "cap_tmp.txt";
-            std::fstream tmp_to(tmp_path, std::ifstream::out);
+            std::fstream tmp_to(tmp_path, std::fstream::out);
             stream_from_.close();
 
             stream_from_.open(path_);
@@ -274,7 +274,7 @@ namespace tape_structure {
             }
             tmp_to.close();
 
-            tmp_to.open(tmp_path, std::ifstream::in);
+            tmp_to.open(tmp_path, std::fstream::in);
             stream_from_.seekg(0);
             stream_from_.seekp(0);
             for (TapeSize i = 0; i < capacity_; i++) {
