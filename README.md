@@ -16,7 +16,7 @@ path_out = <PATH_TO_OUTPUT_TAPE>
 
 Commands:
 ```
-$ git clone 'https://github.com/maladetska/TapeSorter'
+$ git clone 'https://github.com/maladetska/TapeStructure'
 $ cd TapeStructure
 $ cmake CMakeLists.txt
 $ make
