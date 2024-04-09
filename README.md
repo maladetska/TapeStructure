@@ -4,7 +4,7 @@
 
 Config example:
 ```
-$ cat <CONFIG_DIR>/config.cfg
+$ cat <CONFIG_DIR>/config.yaml
 N = 19
 M = 65
 delay_for_read = 0
@@ -17,10 +17,10 @@ path_out = <PATH_TO_OUTPUT_TAPE>
 Commands:
 ```
 $ git clone 'https://github.com/maladetska/TapeSorter'
-$ cd TapeSorter
+$ cd TapeStructure
 $ cmake CMakeLists.txt
 $ make
-$ ./bin/TapeSorter <CONFIG_DIR>/config.cfg
+$ ./bin/TapeStructure <CONFIG_DIR>/config.yaml
 ```
 
 
