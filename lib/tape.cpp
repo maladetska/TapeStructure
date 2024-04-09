@@ -14,7 +14,6 @@ namespace tape_structure {
                std::chrono::milliseconds delay_for_shift) : path_(path),
                                                             delays_(delay_for_read, delay_for_put, delay_for_shift),
                                                             size_(tape_size) {
-        CountCapacity();
         chunks_info_ = ChunksInfo(chunk_size, size_);
         current_chunk_ = Chunk(0, chunks_info_.max_size_chunk_);
         stream_from_.open(path_);
@@ -26,14 +25,13 @@ namespace tape_structure {
     Tape::Tape(const Tape& other) : path_(other.path_),
                                     delays_(other.delays_),
                                     size_(other.size_),
-                                    capacity_(other.capacity_),
                                     chunks_info_(other.chunks_info_),
                                     current_chunk_(other.current_chunk_) {}
 
-    void Tape::PrintInFile(std::fstream& stream_to) {
+    void Tape::RewriteFromTo(std::fstream& from, std::fstream& to) {
         NumberType num;
-        while (stream_to >> num) {
-            stream_from_ << num << ' ';
+        while (from >> num) {
+            to << num << ' ';
         }
     }
 
@@ -41,7 +39,7 @@ namespace tape_structure {
         path_ = path;
         stream_from_.open(path_);
         std::fstream other_file(other.path_);
-        PrintInFile(other_file);
+        RewriteFromTo(other_file, stream_from_);
         stream_from_.close();
         other_file.close();
     }
@@ -50,7 +48,6 @@ namespace tape_structure {
         path_ = other.path_;
         delays_ = other.delays_;
         size_ = other.size_;
-        capacity_ = other.capacity_;
         chunks_info_ = other.chunks_info_;
         current_chunk_ = other.current_chunk_;
         unused_ = other.unused_;
@@ -61,7 +58,7 @@ namespace tape_structure {
             }
             stream_from_.open(path_, std::ios::in | std::ios::out);
             std::fstream other_file(other.path_);
-            PrintInFile(other_file);
+            RewriteFromTo(other_file, stream_from_);
             stream_from_.close();
         } else {
             path_ = other.path_;
@@ -81,7 +78,6 @@ namespace tape_structure {
 
         std::swap(other.delays_, delays_);
         std::swap(other.size_, size_);
-        std::swap(other.capacity_, capacity_);
         std::swap(other.chunks_info_, chunks_info_);
         std::swap(other.current_chunk_, current_chunk_);
         std::swap(other.unused_, unused_);
@@ -91,7 +87,7 @@ namespace tape_structure {
             stream_from_.open(path_, std::ios::in | std::ios::out);
             other.stream_from_.close();
             other.stream_from_.open(other.path_, std::ios::in | std::ios::out);
-            PrintInFile(other.stream_from_);
+            RewriteFromTo(other.stream_from_, stream_from_);
             stream_from_.close();
         } else {
             path_ = other.path_;
@@ -107,7 +103,7 @@ namespace tape_structure {
     }
 
     ChunkSize Tape::CountChunkSize(MemorySize memory, TapeSize size) {
-        return std::min(memory / kDivider, size); //
+        return std::min(memory / kDivider, size);
     }
 
     std::filesystem::path Tape::GetPath() const {
@@ -151,7 +147,7 @@ namespace tape_structure {
 
         if (current_chunk_.IsPossibleTakeLeftNumber()) {
             if (!current_chunk_.MoveRightPos()) {
-                ReadPrevChunk();
+                ReadChunkToTheLeft();
             }
             return true;
         }
@@ -166,7 +162,7 @@ namespace tape_structure {
 
         if (current_chunk_.IsPossibleTakeRightNumber(chunks_info_.count_of_chunks_)) {
             if (!current_chunk_.MoveLeftPos()) {
-                ReadNextChunk();
+                ReadChunkToTheRight();
             }
             return true;
         }
@@ -191,14 +187,14 @@ namespace tape_structure {
         stream_from_.seekp(0);
 
         if (chunks_info_.count_of_chunks_ == 1) {
-            PutNumberInChunk(tmp_to, chunks_info_.max_size_chunk_, current_pos, number);
+            PutNumberInNewChunk(tmp_to, chunks_info_.max_size_chunk_, current_pos, number);
         } else if (current_chunk_number == chunks_info_.count_of_chunks_ - 1) {
             for (TapeSize i = 0; i < chunks_info_.count_of_chunks_ - 1; i++) {
                 ReadAndWriteNewChunk(stream_from_, tmp_to, i, chunks_info_.max_size_chunk_);
             }
-            PutNumberInChunk(tmp_to, chunks_info_.last_size_chunk_, current_pos, number);
+            PutNumberInNewChunk(tmp_to, chunks_info_.last_size_chunk_, current_pos, number);
         } else if (current_chunk_number == 0) {
-            PutNumberInChunk(tmp_to, chunks_info_.max_size_chunk_, current_pos, number);
+            PutNumberInNewChunk(tmp_to, chunks_info_.max_size_chunk_, current_pos, number);
             for (TapeSize i = 1; i < chunks_info_.count_of_chunks_ - 1; i++) {
                 ReadAndWriteNewChunk(stream_from_, tmp_to, i, chunks_info_.max_size_chunk_);
             }
@@ -210,7 +206,7 @@ namespace tape_structure {
             for (TapeSize i = 0; i < current_chunk_number; i++) {
                 ReadAndWriteNewChunk(stream_from_, tmp_to, i, chunks_info_.max_size_chunk_);
             }
-            PutNumberInChunk(tmp_to, chunks_info_.max_size_chunk_, current_pos, number);
+            PutNumberInNewChunk(tmp_to, chunks_info_.max_size_chunk_, current_pos, number);
             for (TapeSize i = current_chunk_number + 1; i < chunks_info_.count_of_chunks_ - 1; i++) {
                 ReadAndWriteNewChunk(stream_from_, tmp_to, i, chunks_info_.max_size_chunk_);
             }
@@ -241,51 +237,13 @@ namespace tape_structure {
         tmp_to.close();
         std::filesystem::remove_all(kDirForTempTapes_);
 
-        while (current_chunk_.IsToTheLeftThan(current_pos, current_chunk_number)) {
+        while (!current_chunk_.IsMatchWith(current_pos, current_chunk_number)) {
             MoveRight();
         }
     }
 
     void Tape::ClearChunkInTape() {
         current_chunk_.Destroy();
-    }
-
-    void Tape::CountCapacity() {
-        stream_from_.open(path_);
-        NumberType number;
-        while (stream_from_ >> number) {
-            capacity_++;
-        }
-        if (capacity_ < size_) {
-            std::filesystem::create_directories(kDirForTempTapes_);
-            std::filesystem::path tmp_path(kDirForTempTapes_);
-            tmp_path += "cap_tmp.txt";
-            std::fstream tmp_to(tmp_path, std::fstream::out);
-            stream_from_.close();
-
-            stream_from_.open(path_);
-            for (TapeSize i = 0; i < capacity_; i++) {
-                stream_from_ >> number;
-                tmp_to << number << ' ';
-            }
-            while (capacity_ < size_) {
-                tmp_to << 0 << ' ';
-                capacity_++;
-            }
-            tmp_to.close();
-
-            tmp_to.open(tmp_path, std::fstream::in);
-            stream_from_.seekg(0);
-            stream_from_.seekp(0);
-            for (TapeSize i = 0; i < capacity_; i++) {
-                tmp_to >> number;
-                stream_from_ << number << ' ';
-            }
-            tmp_to.close();
-
-            remove_all(tmp_path);
-        }
-        stream_from_.close();
     }
 
     bool Tape::InitFirstChunk() {
@@ -299,7 +257,7 @@ namespace tape_structure {
         return false;
     }
 
-    void Tape::ReadNextChunk() {
+    void Tape::ReadChunkToTheRight() {
         if (InitFirstChunk()) {
             return;
         }
@@ -313,7 +271,7 @@ namespace tape_structure {
         current_chunk_.MoveToLeftEdge();
     }
 
-    void Tape::ReadPrevChunk() {
+    void Tape::ReadChunkToTheLeft() {
         stream_from_.seekp(0);
         stream_from_.seekg(0);
 
@@ -330,12 +288,12 @@ namespace tape_structure {
         current_chunk_.MoveToRightEdge();
     }
 
-    void Tape::PutNumberInChunk(std::fstream& stream_to, ChunkSize size, ChunkSize pos, NumberType number) {
+    void Tape::PutNumberInNewChunk(std::fstream& to, ChunkSize size, ChunkSize pos, NumberType number) {
         current_chunk_.ReadNewChunk(stream_from_,
                                     current_chunk_.GetChunkNumber(),
                                     size);
         current_chunk_.PutNumberInArrayByPos(number, pos);
-        current_chunk_.PrintChunk(stream_to);
+        current_chunk_.PrintChunk(to);
     }
 
     void Tape::ReadAndWriteNewChunk(std::fstream& from,

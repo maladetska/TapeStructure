@@ -2,15 +2,7 @@
 
 namespace tape_structure {
     TapeSorter::TapeSorter(Tape &tape_in, Tape &tape_out) : tape_in_(tape_in),
-                                                            tape_out_(tape_out) {
-        file_stream_in_.open(tape_in_.GetPath());
-        file_stream_out_.open(tape_out_.GetPath());
-    }
-
-    TapeSorter::~TapeSorter() {
-        file_stream_in_.close();
-        file_stream_out_.close();
-    }
+                                                            tape_out_(tape_out) {}
 
     void TapeSorter::Sort() {
         std::filesystem::create_directories(dir_for_tmp_tapes_);
@@ -24,24 +16,24 @@ namespace tape_structure {
         if (count_of_chunks == 1) {
             tape_out_ = std::move(tapes[0]);
         } else {
-            for (size_t i = count_of_chunks, j = 1; i != 2; i = (i - 1) / 2 + 1, j++) {
+            for (TapeSize i = count_of_chunks, j = 1; i != 2; i = (i - 1) / 2 + 1, j++) {
                 Assembly(j, tapes);
                 std::filesystem::path prev(dir_for_tmp_tapes_);
                 prev += "/" + std::to_string(j - 1) + "/";
                 std::filesystem::remove_all(prev);
             }
 
-            std::fstream tape_out_file(tape_out_.GetPath(), std::fstream::out);
-            tape_out_ = std::move(Merge(tape_out_file, tape_out_.GetPath(), tapes[0], tapes[1]));
-            tape_out_file.close();
+            tape_out_ = std::move(Merge(tape_out_.GetPath(), tapes[0], tapes[1]));
         }
         std::filesystem::remove_all(dir_for_tmp_tapes_);
     }
 
-    Tape TapeSorter::Merge(std::fstream &stream_to, std::filesystem::path path, Tape &tape1, Tape &tape2) {
+    Tape TapeSorter::Merge(std::filesystem::path path, Tape &tape1, Tape &tape2) {
         std::pair<bool, bool> check_ends = {false, false};
+
+        std::fstream result_file_stream(path, std::fstream::out);
         Tape result_tape(path, tape1.GetSize() + tape2.GetSize(), tape1.GetMaxChunkSize());
-        for (size_t i = 0; i < result_tape.GetCountOfChunks() - 1; i++) {
+        for (TapeSize i = 0; i < result_tape.GetCountOfChunks() - 1; i++) {
             check_ends = MergeOneChunk(
                     result_tape,
                     tape1,
@@ -58,7 +50,7 @@ namespace tape_structure {
                 check_ends.second,
                 result_tape.GetMinChunkSize());
 
-        stream_to.close();
+        result_file_stream.close();
         tape1.ClearChunkInTape();
         tape2.ClearChunkInTape();
 
@@ -110,18 +102,18 @@ namespace tape_structure {
     void TapeSorter::Split(std::filesystem::path &path, std::vector<Tape> &tapes) {
         path += "/" + std::to_string(0) + "/";
         std::filesystem::create_directories(path);
-        size_t count_of_chunks = tape_in_.GetCountOfChunks();
-        for (size_t i = 0; i < count_of_chunks; i++) {
-            MakeSplitFile(path, tapes[i], i);
+        TapeSize count_of_chunks = tape_in_.GetCountOfChunks();
+        for (TapeSize i = 0; i < count_of_chunks; i++) {
+            MakeSplitTape(path, tapes[i], i);
         }
     }
 
-    void TapeSorter::MakeSplitFile(std::filesystem::path &path, Tape &tape, size_t file_number) {
+    void TapeSorter::MakeSplitTape(std::filesystem::path &path, Tape &tape, TapeSize tape_number) {
         std::filesystem::path tmp_file = path;
-        tmp_file += std::to_string(file_number) + ".txt";
+        tmp_file += std::to_string(tape_number) + ".txt";
         std::fstream stream_to(tmp_file, std::fstream::out);
 
-        tape_in_.ReadNextChunk();
+        tape_in_.ReadChunkToTheRight();
 
         std::vector<NumberType> buffer = tape_in_.GetChunkNumbers();
         std::sort(buffer.begin(), buffer.end());
@@ -135,22 +127,20 @@ namespace tape_structure {
         tape = std::move(result_tape);
     }
 
-    void TapeSorter::Assembly(size_t dir, std::vector<Tape> &tapes) {
+    void TapeSorter::Assembly(TapeSize dir, std::vector<Tape> &tapes) {
         std::filesystem::path curr_path(dir_for_tmp_tapes_);
         curr_path += "/" + std::to_string(dir) + "/";
         std::filesystem::create_directories(curr_path);
 
-        size_t tapes_size = tapes.size();
+        TapeSize tapes_size = tapes.size();
         std::vector<Tape> new_tapes(tapes_size % 2 == 0
                                             ? tapes_size / 2
                                             : tapes_size / 2 + 1);
-        size_t i = 0;
-        for (size_t j = 0; i < tapes_size / 2; i++, j += 2) {
+        TapeSize i = 0;
+        for (TapeSize j = 0; i < tapes_size / 2; i++, j += 2) {
             std::filesystem::path tmp_file = curr_path;
             tmp_file += std::to_string(i) + ".txt";
-            std::fstream stream_to(tmp_file, std::fstream::out);
-
-            new_tapes[i] = std::move(Merge(stream_to, tmp_file, tapes[j], tapes[j + 1]));
+            new_tapes[i] = std::move(Merge(tmp_file, tapes[j], tapes[j + 1]));
         }
         if (tapes_size % 2 != 0) {
             std::filesystem::path tmp_file = curr_path;

@@ -34,8 +34,8 @@ namespace tape_structure {
         return !(chunk_number_ == count_of_chunks - 1 && pos_ == size_ - 1);
     }
 
-    bool Chunk::IsToTheLeftThan(ChunkSize pos_to, ChunksCount chunk_number_to) const {
-        return !(pos_ == pos_to && chunk_number_to == chunk_number_);
+    bool Chunk::IsMatchWith(ChunkSize another_pos, ChunksCount another_chunk_number) const {
+        return pos_ == another_pos && another_chunk_number == chunk_number_;
     }
 
     bool Chunk::MoveLeftPos() {
