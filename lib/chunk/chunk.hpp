@@ -4,6 +4,8 @@
 #include <fstream>
 #include <vector>
 
+#include "../delays/delays.hpp"
+
 namespace tape_structure {
     using NumberType = int32_t;
     using ChunkSize = uint32_t;
@@ -12,7 +14,7 @@ namespace tape_structure {
     class Chunk {
     public:
         Chunk() = default;
-        Chunk(ChunksCount chunk_number, ChunkSize size);
+        Chunk(Delays delays, ChunksCount chunk_number, ChunkSize size);
 
         Chunk(const Chunk &) = default;
         Chunk &operator=(const Chunk &) = default;
@@ -121,7 +123,7 @@ namespace tape_structure {
         void PrintChunk(std::fstream &to);
 
         /**
-         * Clear chunk.
+         * Clear chunk without changing delays.
          */
         void Destroy();
 
@@ -138,6 +140,8 @@ namespace tape_structure {
          * @return true if the current position is the rightmost else false.
          */
         [[nodiscard]] bool IsRightEdge() const;
+
+        Delays delays_;
 
         /**
          * Chunk number/position/id.

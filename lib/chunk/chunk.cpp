@@ -1,8 +1,10 @@
 #include "chunk.hpp"
 
 namespace tape_structure {
-    Chunk::Chunk(ChunksCount chunk_number,
-                 ChunkSize size) : chunk_number_(chunk_number),
+    Chunk::Chunk(Delays delays,
+                 ChunksCount chunk_number,
+                 ChunkSize size) : delays_(delays),
+                                   chunk_number_(chunk_number),
                                    size_(size),
                                    pos_(0) {}
 
@@ -15,6 +17,7 @@ namespace tape_structure {
     }
 
     NumberType Chunk::GetCurrentNumber() const {
+        std::this_thread::sleep_for(delays_.delay_for_read_);
         return numbers_[pos_];
     }
 
@@ -42,7 +45,7 @@ namespace tape_structure {
         if (IsRightEdge()) {
             return false;
         }
-
+        std::this_thread::sleep_for(delays_.delay_for_shift_);
         pos_++;
 
         return true;
@@ -52,6 +55,7 @@ namespace tape_structure {
         if (!IsPossibleTakeLeftNumber() || IsLeftEdge()) {
             return false;
         }
+        std::this_thread::sleep_for(delays_.delay_for_shift_);
         pos_--;
 
         return true;
@@ -64,11 +68,14 @@ namespace tape_structure {
         numbers_.clear();
         numbers_.resize(size_);
         for (NumberType &num: numbers_) {
+            std::this_thread::sleep_for(delays_.delay_for_shift_);
+            std::this_thread::sleep_for(delays_.delay_for_read_);
             from >> num;
         }
     }
 
     void Chunk::PutNumberInArrayByPos(const NumberType &number, const ChunkSize pos) {
+        std::this_thread::sleep_for(delays_.delay_for_put_);
         numbers_[pos] = number;
     }
 
@@ -84,6 +91,7 @@ namespace tape_structure {
         pos_ = 0;
         numbers_.clear();
     }
+
     std::vector<NumberType> Chunk::GetChunkNumbers() const {
         return numbers_;
     }

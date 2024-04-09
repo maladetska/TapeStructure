@@ -9,7 +9,7 @@ namespace tape_structure {
         std::filesystem::path tmp_path(dir_for_tmp_tapes_);
         TapeSize count_of_chunks = tape_in_.GetCountOfChunks();
 
-        std::vector<Tape> tapes(count_of_chunks);
+        std::vector<Tape> tapes(count_of_chunks, Tape(tape_in_.delays_));
 
         Split(tmp_path, tapes);
 

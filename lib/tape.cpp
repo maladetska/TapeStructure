@@ -1,10 +1,20 @@
 #include "tape.hpp"
 
 namespace tape_structure {
+    Tape::Tape(Delays delays) : delays_(delays) {}
 
-    Tape::Tape(std::filesystem::path& path)
-        : path_(path),
-          current_chunk_(Chunk(0, chunks_info_.max_size_chunk_)) {}
+    Tape::Tape(std::chrono::milliseconds delay_for_read,
+               std::chrono::milliseconds delay_for_put,
+               std::chrono::milliseconds delay_for_shift) : delays_(delay_for_read, delay_for_put, delay_for_shift) {}
+
+    Tape::Tape(std::filesystem::path& path,
+               std::chrono::milliseconds delay_for_read,
+               std::chrono::milliseconds delay_for_put,
+               std::chrono::milliseconds delay_for_shift) : path_(path),
+                                                            delays_(delay_for_read, delay_for_put, delay_for_shift) {}
+
+    Tape::Tape(std::filesystem::path& path, Delays delays) : path_(path),
+                                                             delays_(delays) {}
 
     Tape::Tape(std::filesystem::path& path,
                TapeSize tape_size,
@@ -15,7 +25,7 @@ namespace tape_structure {
                                                             delays_(delay_for_read, delay_for_put, delay_for_shift),
                                                             size_(tape_size) {
         chunks_info_ = ChunksInfo(chunk_size, size_);
-        current_chunk_ = Chunk(0, chunks_info_.max_size_chunk_);
+        current_chunk_ = Chunk(delays_, 0, chunks_info_.max_size_chunk_);
         stream_from_.open(path_);
     }
 
@@ -131,7 +141,6 @@ namespace tape_structure {
     }
 
     NumberType Tape::GetCurrentNumber() {
-        std::this_thread::sleep_for(delays_.delay_for_read_);
         if (InitFirstChunk()) {
             current_chunk_.MoveToLeftEdge();
         }
@@ -140,7 +149,6 @@ namespace tape_structure {
     }
 
     bool Tape::MoveRight() {
-        std::this_thread::sleep_for(delays_.delay_for_shift_);
         if (InitFirstChunk()) {
             current_chunk_.MoveToLeftEdge();
         }
@@ -155,7 +163,6 @@ namespace tape_structure {
     }
 
     bool Tape::MoveLeft() {
-        std::this_thread::sleep_for(delays_.delay_for_shift_);
         if (InitFirstChunk()) {
             current_chunk_.MoveToLeftEdge();
         }
@@ -170,8 +177,6 @@ namespace tape_structure {
     }
 
     void Tape::Put(const NumberType& number) {
-        std::this_thread::sleep_for(delays_.delay_for_put_);
-
         ChunkSize current_pos = current_chunk_.GetPos();
         ChunksCount current_chunk_number = current_chunk_.GetChunkNumber();
         if (InitFirstChunk()) {
@@ -303,12 +308,6 @@ namespace tape_structure {
         current_chunk_.ReadNewChunk(from, new_chunk_number, new_size);
         current_chunk_.PrintChunk(to);
     }
-
-    Tape::Delays::Delays(std::chrono::milliseconds delay_for_read,
-                         std::chrono::milliseconds delay_for_put,
-                         std::chrono::milliseconds delay_for_shift) : delay_for_read_(delay_for_read),
-                                                                      delay_for_put_(delay_for_put),
-                                                                      delay_for_shift_(delay_for_shift) {}
 
     Tape::ChunksInfo::ChunksInfo::ChunksInfo(ChunkSize chunk_size, TapeSize tape_size) {
         max_size_chunk_ = chunk_size;

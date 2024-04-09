@@ -1,15 +1,12 @@
 #pragma once
 
-#include <chrono>
 #include <filesystem>
 #include <fstream>
-#include <future>
 #include <vector>
 
 #include "chunk/chunk.hpp"
 
 namespace tape_structure {
-    using namespace std::chrono_literals;
     using TapeSize = ChunksCount;
     using MemorySize = uint32_t;
 
@@ -22,7 +19,15 @@ namespace tape_structure {
     public:
         Tape() = default;
 
-        explicit Tape(std::filesystem::path &path);
+        explicit Tape(Delays delays);
+        Tape(std::chrono::milliseconds delay_for_read,
+             std::chrono::milliseconds delay_for_put,
+             std::chrono::milliseconds delay_for_shift);
+        Tape(std::filesystem::path &path,
+             std::chrono::milliseconds delay_for_read,
+             std::chrono::milliseconds delay_for_put,
+             std::chrono::milliseconds delay_for_shift);
+        Tape(std::filesystem::path &path, Delays delays);
         Tape(std::filesystem::path &path,
              TapeSize tape_size,
              ChunkSize chunk_size,
@@ -123,29 +128,6 @@ namespace tape_structure {
         friend class TapeSorter;
 
     private:
-        /**
-         * Delays for processes.
-         */
-        struct Delays {
-            Delays() = default;
-            Delays(std::chrono::milliseconds delay_for_read,
-                   std::chrono::milliseconds delay_for_put,
-                   std::chrono::milliseconds delay_for_shift);
-
-            /**
-             * Delay in reading the number indicated by the magnetic head.
-             */
-            std::chrono::milliseconds delay_for_read_{};
-            /**
-             * Delay in putting the number to the position indicated by the magnetic head.
-             */
-            std::chrono::milliseconds delay_for_put_{};
-            /**
-             * Delay for moving the tape by one position.
-             */
-            std::chrono::milliseconds delay_for_shift_{};
-        };
-
         /**
          * Information about chunks inside the tape.
          */

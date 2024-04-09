@@ -27,8 +27,11 @@ TEST(TapeStructure, TestResultFile1) {
             delay_for_read,
             delay_for_put,
             delay_for_shift);
+    tape_structure::Tape tape_out(path_out,
+                                  delay_for_read,
+                                  delay_for_put,
+                                  delay_for_shift);
 
-    tape_structure::Tape tape_out(path_out);
     tape_structure::TapeSorter sorter(tape_in, tape_out);
 
     sorter.Sort();
@@ -66,7 +69,10 @@ TEST(TapeStructure, TestResultFile2) {
             delay_for_put,
             delay_for_shift);
 
-    tape_structure::Tape tape_out(path_out);
+    tape_structure::Tape tape_out(path_out,
+                                  delay_for_read,
+                                  delay_for_put,
+                                  delay_for_shift);
     tape_structure::TapeSorter sorter(tape_in, tape_out);
 
     sorter.Sort();
@@ -104,7 +110,10 @@ TEST(TapeStructure, TestResultFile3) {
             delay_for_put,
             delay_for_shift);
 
-    tape_structure::Tape tape_out(path_out);
+    tape_structure::Tape tape_out(path_out,
+                                  delay_for_read,
+                                  delay_for_put,
+                                  delay_for_shift);
     tape_structure::TapeSorter sorter(tape_in, tape_out);
 
     sorter.Sort();
